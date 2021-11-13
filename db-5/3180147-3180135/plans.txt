@@ -1,0 +1,344 @@
+Query 1
+
+SELECT "Host".id, COUNT(*) 
+FROM "Listing", "Host" 
+WHERE "Host".id="Listing".host_id 
+GROUP BY "Host".id;
+
+BEFORE ADDING Index
+
+"GroupAggregate  (cost=10000003709.40..10000004195.19 rows=6363 width=12) (actual time=15.028..31.666 rows=6363 loops=1)"
+"  Group Key: "Host".id"
+"  ->  Merge Join  (cost=10000003709.40..10000004073.85 rows=11541 width=4) (actual time=15.017..26.638 rows=11541 loops=1)"
+"        Merge Cond: ("Listing".host_id = "Host".id)"
+"        ->  Sort  (cost=10000003709.11..10000003737.96 rows=11541 width=4) (actual time=15.004..17.570 rows=11541 loops=1)"
+"              Sort Key: "Listing".host_id"
+"              Sort Method: quicksort  Memory: 925kB"
+"              ->  Seq Scan on "Listing"  (cost=10000000000.00..10000002930.41 rows=11541 width=4) (actual time=0.008..10.228 rows=11541 loops=1)"
+"        ->  Index Only Scan using "Host_pkey" on "Host"  (cost=0.28..175.73 rows=6363 width=4) (actual time=0.010..1.724 rows=6363 loops=1)"
+"              Heap Fetches: 0"
+"Planning time: 1.391 ms"
+"Execution time: 33.649 ms"
+
+AFTER ADDING INDEX 
+
+"HashAggregate  (cost=652.69..716.32 rows=6363 width=12) (actual time=16.364..18.071 rows=6363 loops=1)"
+"  Group Key: "Host".id"
+"  ->  Hash Join  (cost=255.55..594.98 rows=11541 width=4) (actual time=3.389..12.103 rows=11541 loops=1)"
+"        Hash Cond: ("Listing".host_id = "Host".id)"
+"        ->  Index Only Scan using host_id_index_for_listing on "Listing"  (cost=0.29..309.40 rows=11541 width=4) (actual time=0.021..3.291 rows=11541 loops=1)"
+"              Heap Fetches: 0"
+"        ->  Hash  (cost=175.73..175.73 rows=6363 width=4) (actual time=3.353..3.354 rows=6363 loops=1)"
+"              Buckets: 8192  Batches: 1  Memory Usage: 288kB"
+"              ->  Index Only Scan using "Host_pkey" on "Host"  (cost=0.28..175.73 rows=6363 width=4) (actual time=0.010..1.633 rows=6363 loops=1)"
+"                    Heap Fetches: 0"
+"Planning time: 0.362 ms"
+"Execution time: 19.297 ms"
+
+/* Query 1: w/out index: 33.649 ms, w/index: 19.297 ms */
+
+***************************************************************************************************
+There is no need to add "Host".id in the index because "Host".id is primary key in table "Host", so
+our index will be constructed using only "Listing".host_id which needs to be searched faster, 
+because it is included in the where clause
+***************************************************************************************************
+
+Query 2
+
+SELECT id, price 
+FROM "Listing", "Price" 
+WHERE guests_included > 5
+AND price > '$40';
+
+before adding index
+
+"Nested Loop  (cost=10000000000.28..10000020397.56 rows=1569576 width=12) (actual time=0.028..1558.444 rows=2469774 loops=1)"
+"  ->  Index Only Scan using "Listings_pkey" on "Listing"  (cost=0.29..433.40 rows=11541 width=4) (actual time=0.016..3.546 rows=11541 loops=1)"
+"        Heap Fetches: 0"
+"  ->  Materialize  (cost=10000000000.00..10000000344.80 rows=136 width=8) (actual time=0.000..0.046 rows=214 loops=11541)"
+"        ->  Seq Scan on "Price"  (cost=10000000000.00..10000000344.11 rows=136 width=8) (actual time=0.009..1.649 rows=214 loops=1)"
+"              Filter: ((guests_included > 5) AND (price > '$40.00'::money))"
+"              Rows Removed by Filter: 11327"
+"Planning time: 0.175 ms"
+"Execution time: 2001.603 ms"
+
+after adding index
+
+"Nested Loop  (cost=0.57..20061.40 rows=1569576 width=12) (actual time=0.055..1545.618 rows=2469774 loops=1)"
+"  ->  Index Only Scan using "Listings_pkey" on "Listing"  (cost=0.29..433.40 rows=11541 width=4) (actual time=0.016..3.957 rows=11541 loops=1)"
+"        Heap Fetches: 0"
+"  ->  Materialize  (cost=0.29..8.65 rows=136 width=8) (actual time=0.000..0.047 rows=214 loops=11541)"
+"        ->  Index Only Scan using guests_included_and_price_index_for_price on "Price"  (cost=0.29..7.97 rows=136 width=8) (actual time=0.036..0.096 rows=214 loops=1)"
+"              Index Cond: ((guests_included > 5) AND (price > '$40.00'::money))"
+"              Heap Fetches: 0"
+"Planning time: 0.191 ms"
+"Execution time: 1984.398 ms"
+
+/* Query 2: w/out index: 2001.603 ms, w/index: 1984.398 ms */
+
+********************************************************************************************
+We created the index using price and guests_included, because they are included in the where 
+clause and because of that we need to search for them faster.
+********************************************************************************************
+
+Query 3
+
+SELECT properties_neighbourhood,street, city, state, zipcode
+FROM "Location"
+FULL OUTER JOIN "Geolocation"
+ON neighbourhood_cleansed=properties_neighbourhood
+WHERE not (street is NULL) AND not (state is NULL) 
+AND not (city is NULL) AND not (zipcode is NULL) AND not (properties_neighbourhood is NULL)
+ORDER BY properties_neighbourhood;
+
+before adding index
+
+"Merge Join  (cost=10000000448.64..10000000485.21 rows=1845 width=55) (actual time=3.481..4.802 rows=1840 loops=1)"
+"  Merge Cond: (("Location".neighbourhood_cleansed)::text = ("Geolocation".properties_neighbourhood)::text)"
+"  ->  Sort  (cost=10000000448.50..10000000453.11 rows=1845 width=63) (actual time=3.470..3.849 rows=1840 loops=1)"
+"        Sort Key: "Location".neighbourhood_cleansed"
+"        Sort Method: quicksort  Memory: 297kB"
+"        ->  Seq Scan on "Location"  (cost=10000000000.00..10000000348.41 rows=1845 width=63) (actual time=0.005..1.962 rows=1840 loops=1)"
+"              Filter: ((street IS NOT NULL) AND (state IS NOT NULL) AND (city IS NOT NULL) AND (zipcode IS NOT NULL))"
+"              Rows Removed by Filter: 9701"
+"  ->  Index Only Scan using "Geolocation_pkey" on "Geolocation"  (cost=0.14..8.93 rows=45 width=21) (actual time=0.007..0.019 rows=45 loops=1)"
+"        Index Cond: (properties_neighbourhood IS NOT NULL)"
+"        Heap Fetches: 0"
+"Planning time: 0.298 ms"
+"Execution time: 5.163 ms"
+
+after adding index
+
+"Sort  (cost=417.88..422.49 rows=1845 width=55) (actual time=3.760..4.109 rows=1840 loops=1)"
+"  Sort Key: "Geolocation".properties_neighbourhood"
+"  Sort Method: quicksort  Memory: 297kB"
+"  ->  Hash Join  (cost=61.05..317.80 rows=1845 width=55) (actual time=0.237..2.281 rows=1840 loops=1)"
+"        Hash Cond: (("Location".neighbourhood_cleansed)::text = ("Geolocation".properties_neighbourhood)::text)"
+"        ->  Bitmap Heap Scan on "Location"  (cost=51.56..303.01 rows=1845 width=63) (actual time=0.193..1.177 rows=1840 loops=1)"
+"              Recheck Cond: ((state IS NOT NULL) AND (zipcode IS NOT NULL))"
+"              Filter: ((street IS NOT NULL) AND (city IS NOT NULL))"
+"              Heap Blocks: exact=232"
+"              ->  Bitmap Index Scan on location_info_index  (cost=0.00..51.09 rows=1845 width=0) (actual time=0.163..0.163 rows=1840 loops=1)"
+"                    Index Cond: ((state IS NOT NULL) AND (zipcode IS NOT NULL))"
+"        ->  Hash  (cost=8.93..8.93 rows=45 width=21) (actual time=0.036..0.037 rows=45 loops=1)"
+"              Buckets: 1024  Batches: 1  Memory Usage: 11kB"
+"              ->  Index Only Scan using "Geolocation_pkey" on "Geolocation"  (cost=0.14..8.93 rows=45 width=21) (actual time=0.006..0.018 rows=45 loops=1)"
+"                    Index Cond: (properties_neighbourhood IS NOT NULL)"
+"                    Heap Fetches: 0"
+"Planning time: 0.275 ms"
+"Execution time: 4.464 ms"
+
+/* Query 3: w/out index: 5.163 ms, w/index: 4.464 ms */
+
+**********************************************************************************************
+We created an index using only the attributes that contained null values in where clause.
+Hence, state and zipcode had null values and needed to be searched faster. City and street
+didn't contain null values, so they would delay our research and also properties_neighbourhood
+is a primary key on table Geolocation, so there is no need to add it in our index.
+**********************************************************************************************
+
+Query 4
+
+SELECT "Connection".listing_id,COUNT(amenity_id)
+FROM "Connection"
+JOIN "Room"
+ON "Connection".listing_id="Room".listing_id
+WHERE "Room".price='$30.00'
+GROUP BY "Connection".listing_id
+HAVING COUNT(amenity_id)>10
+ORDER BY count(amenity_id) DESC;
+
+before adding index 
+
+"Sort  (cost=4399.62..4427.41 rows=11118 width=12) (actual time=21.919..22.035 rows=577 loops=1)"
+"  Sort Key: (count("Connection".amenity_id)) DESC"
+"  Sort Method: quicksort  Memory: 52kB"
+"  ->  GroupAggregate  (cost=0.71..3652.46 rows=11118 width=12) (actual time=0.090..21.666 rows=577 loops=1)"
+"        Group Key: "Connection".listing_id"
+"        Filter: (count("Connection".amenity_id) > 10)"
+"        Rows Removed by Filter: 24"
+"        ->  Nested Loop  (cost=0.71..3428.00 rows=15103 width=8) (actual time=0.049..17.663 rows=15114 loops=1)"
+"              ->  Index Scan using "Room_pkey" on "Room"  (cost=0.29..995.23 rows=602 width=4) (actual time=0.019..3.823 rows=602 loops=1)"
+"                    Filter: ((price)::text = '$30.00'::text)"
+"                    Rows Removed by Filter: 10939"
+"              ->  Index Only Scan using "Connection_pkey" on "Connection"  (cost=0.42..3.78 rows=26 width=8) (actual time=0.006..0.012 rows=25 loops=602)"
+"                    Index Cond: (listing_id = "Room".listing_id)"
+"                    Heap Fetches: 0"
+"Planning time: 0.338 ms"
+"Execution time: 22.194 ms"
+
+after adding index
+
+"Sort  (cost=4084.62..4112.41 rows=11118 width=12) (actual time=17.591..17.700 rows=577 loops=1)"
+"  Sort Key: (count("Connection".amenity_id)) DESC"
+"  Sort Method: quicksort  Memory: 52kB"
+"  ->  HashAggregate  (cost=3226.28..3337.46 rows=11118 width=12) (actual time=17.177..17.411 rows=577 loops=1)"
+"        Group Key: "Connection".listing_id"
+"        Filter: (count("Connection".amenity_id) > 10)"
+"        Rows Removed by Filter: 24"
+"        ->  Nested Loop  (cost=13.37..3113.00 rows=15103 width=8) (actual time=0.132..12.549 rows=15114 loops=1)"
+"              ->  Bitmap Heap Scan on "Room"  (cost=12.95..680.23 rows=602 width=4) (actual time=0.122..0.664 rows=602 loops=1)"
+"                    Recheck Cond: ((price)::text = '$30.00'::text)"
+"                    Heap Blocks: exact=387"
+"                    ->  Bitmap Index Scan on price_index  (cost=0.00..12.80 rows=602 width=0) (actual time=0.083..0.083 rows=602 loops=1)"
+"                          Index Cond: ((price)::text = '$30.00'::text)"
+"              ->  Index Only Scan using "Connection_pkey" on "Connection"  (cost=0.42..3.78 rows=26 width=8) (actual time=0.003..0.009 rows=25 loops=602)"
+"                    Index Cond: (listing_id = "Room".listing_id)"
+"                    Heap Fetches: 0"
+"Planning time: 0.463 ms"
+"Execution time: 17.911 ms"
+
+/* Query 4: w/out index: 22.194 ms, w/index: 17.911 ms */
+
+*************************************************************************************************
+We created our index using column price because it is included on the where clause. All the other
+arguments of the query where primary keys, so there is no need to add them in our index, because 
+they wouldn't make our search faster
+*************************************************************************************************
+
+Query 5
+
+SELECT "Host".id,COUNT(calculated_host_listings_count),COUNT(calculated_host_listings_count_entire_homes),
+COUNT(calculated_host_listings_count_private_rooms),COUNT(calculated_host_listings_count_shared_rooms)
+FROM "Host"
+JOIN "Listing"
+ON "Host".id="Listing".host_id
+Group by "Host".id
+HAVING COUNT(calculated_host_listings_count)>3
+LIMIT 100;
+
+before adding index
+
+"Limit  (cost=10000003709.40..10000003726.36 rows=100 width=36) (actual time=22.731..26.419 rows=100 loops=1)"
+"  ->  GroupAggregate  (cost=10000003709.40..10000004788.60 rows=6363 width=36) (actual time=22.730..26.379 rows=100 loops=1)"
+"        Group Key: "Host".id"
+"        Filter: (count("Host".calculated_host_listings_count) > 3)"
+"        Rows Removed by Filter: 975"
+"        ->  Merge Join  (cost=10000003709.40..10000004551.85 rows=11541 width=20) (actual time=22.713..25.405 rows=2281 loops=1)"
+"              Merge Cond: ("Host".id = "Listing".host_id)"
+"              ->  Index Scan using "Host_pkey" on "Host"  (cost=0.28..653.73 rows=6363 width=8) (actual time=0.009..0.473 rows=1076 loops=1)"
+"              ->  Sort  (cost=10000003709.11..10000003737.96 rows=11541 width=16) (actual time=22.698..23.244 rows=2281 loops=1)"
+"                    Sort Key: "Listing".host_id"
+"                    Sort Method: quicksort  Memory: 925kB"
+"                    ->  Seq Scan on "Listing"  (cost=10000000000.00..10000002930.41 rows=11541 width=16) (actual time=0.006..18.017 rows=11541 loops=1)"
+"Planning time: 0.249 ms"
+"Execution time: 27.203 ms"
+
+after adding index 
+
+"Limit  (cost=10000003709.40..10000003726.36 rows=100 width=36) (actual time=20.182..23.867 rows=100 loops=1)"
+"  ->  GroupAggregate  (cost=10000003709.40..10000004788.60 rows=6363 width=36) (actual time=20.181..23.818 rows=100 loops=1)"
+"        Group Key: "Host".id"
+"        Filter: (count("Host".calculated_host_listings_count) > 3)"
+"        Rows Removed by Filter: 975"
+"        ->  Merge Join  (cost=10000003709.40..10000004551.85 rows=11541 width=20) (actual time=20.164..22.829 rows=2281 loops=1)"
+"              Merge Cond: ("Host".id = "Listing".host_id)"
+"              ->  Index Scan using "Host_pkey" on "Host"  (cost=0.28..653.73 rows=6363 width=8) (actual time=0.008..0.449 rows=1076 loops=1)"
+"              ->  Sort  (cost=10000003709.11..10000003737.96 rows=11541 width=16) (actual time=20.149..20.687 rows=2281 loops=1)"
+"                    Sort Key: "Listing".host_id"
+"                    Sort Method: quicksort  Memory: 925kB"
+"                    ->  Seq Scan on "Listing"  (cost=10000000000.00..10000002930.41 rows=11541 width=16) (actual time=0.006..15.553 rows=11541 loops=1)"
+"Planning time: 0.291 ms"
+"Execution time: 23.940 ms"
+
+/* Query 5: w/out index: 27.203 ms, w/index: 23.940 ms */
+
+**************************************************************************************************
+We created our index using calculated_host_listings_count, which was included in the having clause
+so our search became faster. 
+**************************************************************************************************
+
+Query 6
+
+SELECT extra_people,guests_included,has_availability
+FROM "Price"
+JOIN "Listing"
+ON "Price".listing_id="Listing".id
+WHERE has_availability=TRUE
+ORDER BY guests_included DESC;
+
+before adding index
+
+"Sort  (cost=10000004530.30..10000004559.15 rows=11541 width=13) (actual time=31.381..33.613 rows=11541 loops=1)"
+"  Sort Key: "Price".guests_included DESC"
+"  Sort Method: quicksort  Memory: 925kB"
+"  ->  Hash Join  (cost=10000003434.88..10000003751.60 rows=11541 width=13) (actual time=18.759..27.911 rows=11541 loops=1)"
+"        Hash Cond: ("Price".listing_id = "Listing".id)"
+"        ->  Seq Scan on "Price"  (cost=10000000000.00..10000000286.41 rows=11541 width=16) (actual time=0.009..2.668 rows=11541 loops=1)"
+"        ->  Hash  (cost=3290.62..3290.62 rows=11541 width=5) (actual time=18.728..18.728 rows=11541 loops=1)"
+"              Buckets: 16384  Batches: 1  Memory Usage: 579kB"
+"              ->  Index Scan using "Listings_pkey" on "Listing"  (cost=0.29..3290.62 rows=11541 width=5) (actual time=0.011..15.187 rows=11541 loops=1)"
+"                    Filter: has_availability"
+"Planning time: 0.220 ms"
+"Execution time: 35.646 ms"
+
+after adding index
+
+"Sort  (cost=10000004395.93..10000004424.78 rows=11541 width=13) (actual time=32.273..34.476 rows=11541 loops=1)"
+"  Sort Key: "Price".guests_included DESC"
+"  Sort Method: quicksort  Memory: 925kB"
+"  ->  Hash Join  (cost=10000003300.52..10000003617.23 rows=11541 width=13) (actual time=19.439..28.827 rows=11541 loops=1)"
+"        Hash Cond: ("Price".listing_id = "Listing".id)"
+"        ->  Seq Scan on "Price"  (cost=10000000000.00..10000000286.41 rows=11541 width=16) (actual time=0.005..2.664 rows=11541 loops=1)"
+"        ->  Hash  (cost=3156.25..3156.25 rows=11541 width=5) (actual time=19.411..19.411 rows=11541 loops=1)"
+"              Buckets: 16384  Batches: 1  Memory Usage: 579kB"
+"              ->  Index Scan using has_availability_index on "Listing"  (cost=0.29..3156.25 rows=11541 width=5) (actual time=0.026..15.754 rows=11541 loops=1)"
+"                    Index Cond: (has_availability = true)"
+"                    Filter: has_availability"
+"Planning time: 0.290 ms"
+"Execution time: 36.508 ms"
+
+/* Query 6: w/out index: 35.646 ms, w/index: 36.508 ms */
+
+**************************************************************************************************
+No need to add an index, because column has_availability is always true in the where clause, so
+the search can't become faster. We also tried other indexes using extra_people and guests_included
+but still the search was slower, because those arguments are not in the where clause.
+**************************************************************************************************
+
+Query 7
+
+SELECT "Listing".description,"Listing".picture_url,"Location".street,"Location".city
+FROM "Listing"
+LEFT OUTER JOIN "Location" 
+ON "Listing".id = "Location".listing_id
+WHERE not ("Location".street is NULL) AND not ("Location".city is NULL) 
+AND description LIKE '%great%';
+
+before adding index 
+
+"Hash Join  (cost=10000003340.45..10000003719.16 rows=1678 width=178) (actual time=57.878..64.656 rows=1226 loops=1)"
+"  Hash Cond: ("Location".listing_id = "Listing".id)"
+"  ->  Seq Scan on "Location"  (cost=10000000000.00..10000000348.41 rows=11541 width=27) (actual time=0.007..3.724 rows=11541 loops=1)"
+"        Filter: ((street IS NOT NULL) AND (city IS NOT NULL))"
+"  ->  Hash  (cost=3319.47..3319.47 rows=1678 width=159) (actual time=57.857..57.857 rows=1226 loops=1)"
+"        Buckets: 2048  Batches: 1  Memory Usage: 213kB"
+"        ->  Index Scan using "Listings_pkey" on "Listing"  (cost=0.29..3319.47 rows=1678 width=159) (actual time=0.032..57.049 rows=1226 loops=1)"
+"              Filter: ((description)::text ~~ '%great%'::text)"
+"              Rows Removed by Filter: 10315"
+"Planning time: 2.259 ms"
+"Execution time: 64.919 ms"
+
+after adding index
+
+"Hash Join  (cost=3703.03..4081.74 rows=1678 width=178) (actual time=57.874..64.501 rows=1226 loops=1)"
+"  Hash Cond: ("Location".listing_id = "Listing".id)"
+"  ->  Bitmap Heap Scan on "Location"  (cost=362.58..710.99 rows=11541 width=27) (actual time=0.910..4.159 rows=11541 loops=1)"
+"        Recheck Cond: ((city IS NOT NULL) AND (street IS NOT NULL))"
+"        Heap Blocks: exact=233"
+"        ->  Bitmap Index Scan on city_and_street_index  (cost=0.00..359.69 rows=11541 width=0) (actual time=0.880..0.880 rows=11541 loops=1)"
+"              Index Cond: ((city IS NOT NULL) AND (street IS NOT NULL))"
+"  ->  Hash  (cost=3319.47..3319.47 rows=1678 width=159) (actual time=56.951..56.951 rows=1226 loops=1)"
+"        Buckets: 2048  Batches: 1  Memory Usage: 213kB"
+"        ->  Index Scan using "Listings_pkey" on "Listing"  (cost=0.29..3319.47 rows=1678 width=159) (actual time=0.037..56.165 rows=1226 loops=1)"
+"              Filter: ((description)::text ~~ '%great%'::text)"
+"              Rows Removed by Filter: 10315"
+"Planning time: 1.002 ms"
+"Execution time: 64.772 ms"
+
+/* Query 7: w/out index: 64.919 ms, w/index: 64.772 ms */
+
+**************************************************************************************************
+We created two indexes because in the where clause there were aruments from both table listing and
+table location. So, after adding the indexes the search was faster.
+**************************************************************************************************

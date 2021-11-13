@@ -1,0 +1,6 @@
+<ΟΡΟΥΤΖΟΓΛΟΥ ΑΙΚΑΤΕΡΙΝΗ > - <3180135>
+<ΠΑΠΑΘΑΝΑΣΙΟΥ ΑΘΑΝΑΣΙΑ ΜΑΡΙΑ>-<3180147>
+Endpoint:<instructionsdb.cjkvlsqkobtz.us-east-1.rds.amazonaws.com>
+Username:<reader>
+Password:<12345>
+Database:<InstActualDB>

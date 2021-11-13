@@ -1,0 +1,10 @@
+BEGIN;
+	set client_encoding to 'utf8';
+	\copy "Calendar" FROM 'C:/Users/Public/airbnb/airbnb/calendar.csv' DELIMITER ',' CSV HEADER;
+	\copy "Listings" FROM 'C:/Users/Public/airbnb/airbnb/listings.csv' DELIMITER ',' CSV HEADER;
+	\copy "Listings_Summary" FROM 'C:/Users/Public/airbnb/airbnb/listings-summary.csv' DELIMITER ',' CSV HEADER;
+	\copy "Reviews" FROM 'C:/Users/Public/airbnb/airbnb/reviews.csv' DELIMITER ',' CSV HEADER;
+	\copy "Reviews_Summary" FROM 'C:/Users/Public/airbnb/airbnb/reviews-summary.csv' DELIMITER ',' CSV HEADER;
+	\copy "Neighbourhoods" FROM 'C:/Users/Public/airbnb/airbnb/neighbourhoods.csv' DELIMITER ',' CSV HEADER;
+	\copy "Geolocation" FROM 'C:/Users/Public/airbnb/airbnb/geolocation.csv' DELIMITER ',' CSV HEADER;
+COMMIT;
